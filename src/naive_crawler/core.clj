@@ -1,5 +1,6 @@
 (ns naive-crawler.core
-    (:use clojure.contrib.io) )
+    (:use clojure.contrib.io)
+    (:use clojure.contrib.base64))
 
     (defn safe [fun]
      "Safe call"
@@ -22,25 +23,25 @@
      "Return true if both urls are from same domain"
      (= (.getHost (java.net.URL. current)) (.getHost (java.net.URL. next)))) 
 
-    (defn make-db []
+    (defn make-db [db]
      "Start an empy database"
-     (atom {})) 
+     (do (.mkdirs (file-str db)) {:db db :pages (atom {})}))
 
     (defn insert [db url]
-     "Insert an url on the db, if no there already"
-     (swap! db #(if (nil? (get %1 url)) (assoc %1 url {}) %1))) 
+     "Insert an url on the db, if not there already"
+     (swap! (:pages db) #(if (nil? (get %1 url)) (assoc %1 url (file-str (:db db) "/" (encode-str url))) %1))) 
 
-    (defn get-it [db url]
+    (defn get-it [{db :pages} url]
      "Get the url from db"
-     (get @db url)) 
+     (slurp* (get @db url))) 
 
-    (defn non-crawled [db]
+    (defn non-crawled [{ db :pages }]
      "Return urls not crawled"
-     (map first (filter #(nil? (:content (second %1))) @db)))
+     (map key (filter #(not ( .exists (val %1) )) @db)))
 
-    (defn set-content [db page content]
+    (defn set-content [{ db :pages } page content]
      "Set the content of a page on the db"
-     (:content (swap! db #(assoc %1 page {:url page :content content}))))
+     (spit (get @db page) content))
 
     (defn save-page [db page]
      "Get the content of page, save it and add it's urls to be crawled"
@@ -48,13 +49,14 @@
       (set-content db page content)
       (dorun (map #(insert db %1) (filter (partial same-domain? page) (find-urls page content))))))
 
-    (defn start [url]
+    (defn start [url path] 
      "Start the crawler"
-     (let [db (make-db )]
+     (let [db (make-db path)]
       (insert db url) 
       (while (not (empty? (non-crawled db)))
-       (dorun (pmap #(save-page db %1) (take n (non-crawled db )))))
-      (deref db))) 
+       (dorun (pmap #(save-page db %1) (non-crawled db))))
+      (deref (db :pages )))) 
 
-    (defn -main [url]
-     (start url)) 
+    (defn -main 
+     ([url]    (start url "pages")) 
+     ([url db] (start url db)))
