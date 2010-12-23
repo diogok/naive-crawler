@@ -29,7 +29,10 @@
 
     (defn insert [db url]
      "Insert an url on the db, if not there already"
-     (swap! (:pages db) #(if (nil? (get %1 url)) (assoc %1 url (file-str (:db db) "/" (encode-str url))) %1))) 
+     (let [file (file-str (:db db) "/" (encode-str url))] 
+       (swap! (:pages db) (fn [pages]
+          (if (nil? (get pages url))
+            (assoc pages url file) pages)))))
 
     (defn get-it [{db :pages} url]
      "Get the url from db"
@@ -55,7 +58,7 @@
       (insert db url) 
       (while (not (empty? (non-crawled db)))
        (dorun (pmap #(save-page db %1) (non-crawled db))))
-      (deref (db :pages )))) 
+      (deref (db :pages)))) 
 
     (defn -main 
      ([url]    (start url "pages")) 
