@@ -1,10 +1,14 @@
 (ns naive-crawler.core
     (:use clojure.contrib.io) )
 
+    (defn safe [fun]
+     "Safe call"
+      (try (fun) (catch Exception e (do false))))
+
     (defn make-url [base path]
      "Make a absolute URL taking the current url
      and the next url. Return is a String"
-     (.toString (java.net.URL. (java.net.URL. base) path )) )
+     (or (safe #(.toString (java.net.URL. (java.net.URL. base) path))) base))
 
     (defn find-links [page]
      "Return the links found on a page as a list"
@@ -40,16 +44,17 @@
 
     (defn save-page [db page]
      "Get the content of page, save it and add it's urls to be crawled"
-     (let [content (slurp* page)]
+     (let [content (or (safe #(slurp* page)) "ERROR")]
       (set-content db page content)
-      (dorun (map #(insert db %1)  (filter (partial same-domain? page) (find-urls page content) )))))
+      (dorun (map #(insert db %1) (filter (partial same-domain? page) (find-urls page content))))))
 
     (defn start [url]
      "Start the crawler"
      (let [db (make-db )]
       (insert db url) 
       (while (not (empty? (non-crawled db)))
-         (dorun (pmap #(save-page db %1) (non-crawled db)))))) 
+       (dorun (pmap #(save-page db %1) (take n (non-crawled db )))))
+      (deref db))) 
 
     (defn -main [url]
      (start url)) 
